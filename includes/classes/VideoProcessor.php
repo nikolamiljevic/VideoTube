@@ -4,22 +4,24 @@ class VideoProcessor {
     private $con;
     private $sizeLimit = 500000000;
     private $allowedTypes = array("mp4", "flv", "webm", "mkv", "vob", "ogv", "ogg", "avi", "wmv", "mov", "mpeg", "mpg");
+    private $ffmpegPath;
 
     public function __construct($con) {
+        $this->ffmpegPath = realpath("ffmpeg/bin/ffmpeg.exe");
         $this->con = $con;
     }
 
     public function upload($videoUploadData) {
 
-        $targetDir = "uploads/videos/";
-        $videoData = $videoUploadData->videoDataArray;
-        
-        $tempFilePath = $targetDir . uniqid() . basename($videoData["name"]);
-        //uploads/videos/5aa3e9343c9ffdogs_playing.flv
+            $targetDir = "uploads/videos/";
+            $videoData = $videoUploadData->videoDataArray;
+            
+            $tempFilePath = $targetDir . uniqid() . basename($videoData["name"]);
+            //uploads/videos/5aa3e9343c9ffdogs_playing.flv
 
-        $tempFilePath = str_replace(" ", "_", $tempFilePath);
+            $tempFilePath = str_replace(" ", "_", $tempFilePath);
 
-        $isValidData = $this->processData($videoData, $tempFilePath);
+            $isValidData = $this->processData($videoData, $tempFilePath);
 
         if(!$isValidData) {
             return false;
@@ -27,10 +29,15 @@ class VideoProcessor {
 
         if(move_uploaded_file($videoData["tmp_name"], $tempFilePath)) {
             
-            $finalFilePath = $targetDir . uniqid() . ".mp4";
+                $finalFilePath = $targetDir . uniqid() . ".mp4";
 
             if(!$this->insertVideoData($videoUploadData, $finalFilePath)) {
                 echo "Insert query failed";
+                return false;
+            }
+
+            if(!$this->convertVideoToMp4($tempFilePath, $finalFilePath)){
+                echo "Upload failed";
                 return false;
             }
 
@@ -81,6 +88,22 @@ class VideoProcessor {
         $query->bindParam(":filePath", $filePath);
 
         return $query->execute();
+    }
+
+    public function convertVideoToMp4($tempFilePath, $finalFilePath){
+        $cmd = "$this->ffmpegPath -i $tempFilePath $finalFilePath 2>&1";
+
+        $outputLog = array();
+        exec($cmd, $outputLog, $returnCode);
+
+        if($returnCode != 0) {
+            //command failed
+            foreach($outputLog as $line){
+                echo $line."<br>";
+            }
+            return false;
+        }
+        return true;
     }
 }
 ?>
